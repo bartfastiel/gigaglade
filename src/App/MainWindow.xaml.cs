@@ -148,6 +148,7 @@ public sealed partial class MainWindow : Window
             if (!ntfs || _index?.Root != index.Root) Reset();
             Show(index);
             await Save(cache, position ?? default);
+            await ReleaseMemory();
         }
         Progress.Visibility = Visibility.Collapsed;
         Summary($"{(needsScan ? "scanned" : "loaded")} in {watch.Elapsed.TotalSeconds:F1} s");
@@ -216,6 +217,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Scanning leaves hundreds of megabytes of garbage behind; return it to the system.</summary>
+    static Task ReleaseMemory() => Task.Run(() => GC.Collect(2, GCCollectionMode.Aggressive, true, true));
+
     async Task Save(string cache, UsnPosition position)
     {
         if (_index is not { } index) return;
@@ -237,6 +241,8 @@ public sealed partial class MainWindow : Window
         _expanded.RemoveWhere(n => !index.IsReachable(n));
         SyncTree();
         UpdateCrumbs();
+        // A hidden treemap must not keep the previous index alive.
+        if (MapHost.Visibility != Visibility.Visible) _tilesIndex = null;
         _ = RenderMap();
         if (first) RefreshResults();
         if (first) _ = LoadColors(index);
@@ -392,14 +398,13 @@ public sealed partial class MainWindow : Window
             }
             int node = _selected;
             bool isDirectory = index.IsDirectory(node);
+            if (risk == DeleteRisk.System && !await Ask("System item – are you sure?",
+                $"{path}\n\nThis belongs to Windows, installed programs or user profiles. Deleting it can break your system.",
+                "Continue anyway")) return;
             if (!await Ask(permanent ? "Delete permanently?" : "Move to the recycle bin?",
                 permanent ? $"{details}\n\nThis cannot be undone."
                     : $"{details}\n\nSpace is freed only when the recycle bin is emptied.",
                 permanent ? "Delete permanently" : "Move to recycle bin")) return;
-            if (risk == DeleteRisk.System && !await Ask("System item – are you sure?",
-                $"{path}\n\nThis belongs to Windows, installed programs or user profiles. Deleting it can break your system.",
-                "Delete anyway")) return;
-
             // The dialog may have been open for a while.
             if (isDirectory ? !Directory.Exists(path) : !File.Exists(path))
             {
@@ -424,7 +429,12 @@ public sealed partial class MainWindow : Window
                     copy.Build();
                     return copy;
                 });
-                if (_index == index) Show(updated);
+                if (_index == index)
+                {
+                    Show(updated);
+                    index = updated; // let go of the old one
+                    await ReleaseMemory();
+                }
             }
         }
         catch (Exception e) { Status.Text = $"Delete failed: {e.Message}"; }

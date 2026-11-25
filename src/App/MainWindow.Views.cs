@@ -108,6 +108,12 @@ public sealed partial class MainWindow
         if (node != _mapRoot && index.Children(node).Length > 0) Zoom(node);
     }
 
+    void Zoom_Click(object sender, RoutedEventArgs e)
+    {
+        if (_index is not { } index || _selected < 0) return;
+        Zoom(index.IsDirectory(_selected) || _selected == index.Root ? _selected : index.Parent[_selected]);
+    }
+
     void Zoom(int node)
     {
         _mapRoot = node;
