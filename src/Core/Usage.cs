@@ -20,6 +20,11 @@ public sealed unsafe class UsageSampler(UsageKind kind)
     public UsageKind Kind => kind;
     public string RootName => kind == UsageKind.Memory ? "Memory (RAM)" : "Processor (CPU)";
 
+    /// <summary>Idle CPU or available memory of the last sample, shown as free area, not as an item.</summary>
+    public long Free { get; private set; }
+
+    public string FreeName => kind == UsageKind.Memory ? "available" : "idle";
+
     /// <summary>Process id of a leaf node, or -1.</summary>
     public Dictionary<int, int> ProcessIds { get; private set; } = [];
 
@@ -70,10 +75,10 @@ public sealed unsafe class UsageSampler(UsageKind kind)
                 long used = (long)(status.Total - status.Available);
                 // Working sets share pages, so the processes can add up to more than is in use.
                 extra.Add(("(kernel, drivers and other)", Math.Max(0, used - sum)));
-                extra.Add(("(available)", (long)status.Available));
+                Free = (long)status.Available;
             }
         }
-        else extra.Add(("(idle)", elapsed > 0 ? Math.Max(0, 10_000 - sum) : 10_000));
+        else Free = elapsed > 0 ? Math.Max(0, 10_000 - sum) : 0;
 
         // Assign ids first, so that the capacity is known.
         int Id(string key) => _ids.TryGetValue(key, out int id) ? id : _ids[key] = _ids.Count + 1;

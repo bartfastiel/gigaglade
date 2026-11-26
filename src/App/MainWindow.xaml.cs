@@ -196,7 +196,7 @@ public sealed partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             Show(index);
             if (Views.Items.IndexOf(Views.SelectedItem) == 2) RefreshResults();
-            Status.Text = $"{sampler.ProcessIds.Count:N0} processes, {Fmt(index.Total[index.Root])} in total – updated {DateTime.Now:T}";
+            Status.Text = $"{sampler.ProcessIds.Count:N0} processes, {Fmt(index.Total[index.Root])} in use, {Fmt(sampler.Free)} {sampler.FreeName} – updated {DateTime.Now:T}";
             await Task.Delay(TimeSpan.FromSeconds(2), token);
         }
     }
@@ -310,8 +310,13 @@ public sealed partial class MainWindow : Window
 
     async Task LoadColors(NodeIndex index)
     {
-        var types = await Task.Run(() => _sampler == null ? Tools.Types(index, index.Root)
-            : [.. index.Children(index.Root).ToArray().Select(n => new TypeStat(index.Name(n).ToString(), index.Total[n], 1))]);
+        if (_sampler != null)
+        {
+            _colors = TypeColors.ForPrograms();
+            await RenderMap();
+            return;
+        }
+        var types = await Task.Run(() => Tools.Types(index, index.Root));
         if (_index?.RootPath != index.RootPath) return;
         _colors = new(types);
         await RenderMap();

@@ -21,6 +21,8 @@
         <StackPanel Orientation="Horizontal" Spacing="8" Grid.ColumnSpan="2">
             <ComboBox x:Name="DriveBox" AutomationProperties.AutomationId="DriveBox" AutomationProperties.Name="Drive" MinWidth="220" SelectionChanged="DriveBox_SelectionChanged" />
             <Button x:Name="RescanButton" AutomationProperties.AutomationId="RescanButton" Content="Rescan" Click="Rescan_Click" />
+            <ToggleButton x:Name="FreeToggle" AutomationProperties.AutomationId="FreeToggle" Content="Free space" IsChecked="True" Click="FreeToggle_Click"
+                          ToolTipService.ToolTip="Show free disk space, idle CPU or available memory in the treemap" />
             <Button x:Name="ZoomButton" AutomationProperties.AutomationId="ZoomButton" Content="Zoom to selection" Click="Zoom_Click" />
             <Button x:Name="ExplorerButton" AutomationProperties.AutomationId="ExplorerButton" Content="Show in Explorer" Click="Explorer_Click" />
             <Button x:Name="CopyButton" AutomationProperties.AutomationId="CopyButton" Content="Copy path" Click="Copy_Click" />
@@ -91,6 +93,8 @@
                 <Image x:Name="MapImage" Stretch="Fill" AutomationProperties.AutomationId="MapImage" AutomationProperties.Name="Treemap" />
                 <Canvas x:Name="MapOverlay" IsHitTestVisible="False">
                     <Rectangle x:Name="MapSelection" Stroke="{ThemeResource TextFillColorPrimaryBrush}" StrokeThickness="3" Visibility="Collapsed" />
+                    <TextBlock x:Name="FreeLabel" TextAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Style="{ThemeResource BodyStrongTextBlockStyle}" Visibility="Collapsed" />
                     <Rectangle x:Name="MapHover" Stroke="{ThemeResource AccentFillColorDefaultBrush}" Fill="{ThemeResource SubtleFillColorSecondaryBrush}"
                                StrokeThickness="2" StrokeDashArray="3,2" Visibility="Collapsed" />
                 </Canvas>

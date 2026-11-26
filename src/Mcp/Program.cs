@@ -199,7 +199,7 @@ sealed class Server
             Thread.Sleep(TimeSpan.FromSeconds(seconds));
             index = sampler.Sample();
         }
-        var text = new StringBuilder($"{sampler.RootName}: {sampler.Format(index.Total[index.Root])} in total\n");
+        var text = new StringBuilder($"{sampler.RootName}: {sampler.Format(index.Total[index.Root])} in use, {sampler.Format(sampler.Free)} {sampler.FreeName}\n");
         foreach (int group in index.Children(index.Root)[..Math.Min(limit, index.Children(index.Root).Length)])
         {
             int count = index.Children(group).Length;

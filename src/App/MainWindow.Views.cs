@@ -32,9 +32,10 @@ public sealed partial class MainWindow
         int w = (int)(width * scale), h = (int)(height * scale), root = _mapRoot;
         if (w < 8 || h < 8) return;
         var colors = _colors;
+        long free = FreeSpace(root);
         var (tiles, pixels) = await Task.Run(() =>
         {
-            var t = Treemap.Layout(index, root, width, height);
+            var t = Treemap.Layout(index, root, width, height, free);
             return (t, Paint(index, t, colors, w, h, scale));
         });
         if (generation != _mapGeneration) return; // a newer picture is on its way
@@ -45,7 +46,35 @@ public sealed partial class MainWindow
         _tiles = tiles;
         _tilesIndex = index;
         ShowMapSelection();
+        ShowFreeLabel(free);
     }
+
+    /// <summary>Free disk space, idle CPU or available memory; only on the top level and when switched on.</summary>
+    long FreeSpace(int root)
+    {
+        if (FreeToggle.IsChecked != true || _index is not { } index || root != index.Root) return 0;
+        if (_sampler != null) return _sampler.Free;
+        try { return new DriveInfo($"{_drive}:").TotalFreeSpace; }
+        catch (IOException) { return 0; }
+    }
+
+    void ShowFreeLabel(long free)
+    {
+        int i = _tiles.FindIndex(t => t.Node == Tile.Free);
+        if (i < 0 || _tiles[i].W < 90 || _tiles[i].H < 30)
+        {
+            FreeLabel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var tile = _tiles[i];
+        FreeLabel.Text = $"{_sampler?.FreeName ?? "free"}\n{Fmt(free)}";
+        FreeLabel.Width = tile.W;
+        Canvas.SetLeft(FreeLabel, tile.X);
+        Canvas.SetTop(FreeLabel, tile.Y + tile.H / 2 - 20);
+        FreeLabel.Visibility = Visibility.Visible;
+    }
+
+    void FreeToggle_Click(object sender, RoutedEventArgs e) => _ = RenderMap();
 
     static byte[] Paint(NodeIndex index, List<Tile> tiles, TypeColors colors, int width, int height, double scale)
     {
@@ -54,6 +83,18 @@ public sealed partial class MainWindow
         {
             int x0 = Math.Clamp((int)(tile.X * scale), 0, width), x1 = Math.Clamp((int)((tile.X + tile.W) * scale), 0, width);
             int y0 = Math.Clamp((int)(tile.Y * scale), 0, height), y1 = Math.Clamp((int)((tile.Y + tile.H) * scale), 0, height);
+            if (tile.Node == Tile.Free)
+            {
+                // Free area: dark, with faint diagonal stripes, so that it reads as empty space.
+                for (int y = y0; y < y1; y++)
+                    for (int x = x0, o = (y * width + x0) * 4; x < x1; x++, o += 4)
+                    {
+                        byte v = (byte)((x + y) % 12 < 2 ? 0x2C : 0x1E);
+                        pixels[o] = pixels[o + 1] = pixels[o + 2] = v;
+                        pixels[o + 3] = 255;
+                    }
+                continue;
+            }
             uint color = !tile.Leaf ? 0x303030u
                 : index.IsDirectory(tile.Node) ? 0x606060u : colors.Get(ColorKey(index, tile.Node));
             int r = (int)(color >> 16 & 255), g = (int)(color >> 8 & 255), b = (int)(color & 255);
@@ -87,7 +128,9 @@ public sealed partial class MainWindow
     {
         if (_tilesIndex == null || _tilesIndex != _index) return null;
         // Parents precede children, so the last match is the deepest one.
-        for (int i = _tiles.Count - 1; i >= 0; i--) if (_tiles[i].Contains(point.X, point.Y)) return _tiles[i];
+        // The free area is no item: nothing to hover, select or zoom.
+        for (int i = _tiles.Count - 1; i >= 0; i--)
+            if (_tiles[i].Contains(point.X, point.Y)) return _tiles[i].Node == Tile.Free ? null : _tiles[i];
         return null;
     }
 
