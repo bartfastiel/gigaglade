@@ -103,9 +103,53 @@ public sealed partial class MainWindow
 
     void Map_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (TileAt(e.GetCurrentPoint(MapHost).Position) is { } tile && _index is { } index)
-            ToolTipService.SetToolTip(MapHost, $"{(_sampler == null ? index.Path(tile.Node) : index.Name(tile.Node).ToString())}\n{Fmt(index.Total[tile.Node])}");
+        if (TileAt(e.GetCurrentPoint(MapHost).Position) is not { } tile || _index is not { } index) return;
+        if (tile.Node == _hoverTile) return;
+        _hoverTile = tile.Node;
+        ToolTipService.SetToolTip(MapHost, $"{(_sampler == null ? index.Path(tile.Node) : index.Name(tile.Node).ToString())}\n{Fmt(index.Total[tile.Node])}");
+        HighlightRow(tile.Node);
     }
+
+    void Map_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _hoverTile = -1;
+        HighlightRow(-1);
+    }
+
+    // ---- hover: highlight the item on the other side ----
+
+    int _hoverTile = -1;
+    Panel? _hoverRow;
+
+    /// <summary>Highlights the tree row of the node, or of its nearest visible ancestor if its folder is collapsed.</summary>
+    void HighlightRow(int node)
+    {
+        if (_hoverRow != null) _hoverRow.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        _hoverRow = null;
+        if (node < 0 || _index is not { } index) return;
+        for (int n = node; ; n = index.Parent[n])
+        {
+            if (Rows.FirstOrDefault(r => r.Node == n) is { } row)
+            {
+                // Only rows on screen have a container; the tree does not scroll on hover.
+                // The row template's own (transparent) background lies above the item's, so colour the template root.
+                if (Tree.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: Panel panel })
+                {
+                    panel.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorTertiaryBrush"];
+                    _hoverRow = panel;
+                }
+                return;
+            }
+            if (n == index.Root || (uint)index.Parent[n] >= (uint)index.Capacity) return;
+        }
+    }
+
+    void Row_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is TreeRow { Node: >= 0 } row) ShowMapRect(MapHover, row.Node);
+    }
+
+    void Row_PointerExited(object sender, PointerRoutedEventArgs e) => MapHover.Visibility = Visibility.Collapsed;
 
     /// <summary>Zooms one level towards the clicked item.</summary>
     void Map_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -147,22 +191,24 @@ public sealed partial class MainWindow
         if (args.Item is Crumb crumb && _index?.IsReachable(crumb.Node) == true) Zoom(crumb.Node);
     }
 
-    void ShowMapSelection()
+    void ShowMapSelection() => ShowMapRect(MapSelection, _selected);
+
+    /// <summary>Frames the node's tile; items too small to be drawn are shown by their nearest drawn ancestor.</summary>
+    void ShowMapRect(Microsoft.UI.Xaml.Shapes.Rectangle frame, int node)
     {
-        MapSelection.Visibility = Visibility.Collapsed;
-        if (_index is not { } index || _selected < 0 || _tilesIndex != index) return;
-        // Items too small to be drawn are shown by their nearest visible ancestor.
-        for (int n = _selected; ; n = index.Parent[n])
+        frame.Visibility = Visibility.Collapsed;
+        if (_index is not { } index || node < 0 || _tilesIndex != index || !index.IsReachable(node)) return;
+        for (int n = node; ; n = index.Parent[n])
         {
             int i = _tiles.FindIndex(t => t.Node == n);
             if (i >= 0)
             {
                 var tile = _tiles[i];
-                Canvas.SetLeft(MapSelection, tile.X);
-                Canvas.SetTop(MapSelection, tile.Y);
-                MapSelection.Width = Math.Max(4, tile.W);
-                MapSelection.Height = Math.Max(4, tile.H);
-                MapSelection.Visibility = Visibility.Visible;
+                Canvas.SetLeft(frame, tile.X);
+                Canvas.SetTop(frame, tile.Y);
+                frame.Width = Math.Max(4, tile.W);
+                frame.Height = Math.Max(4, tile.H);
+                frame.Visibility = Visibility.Visible;
                 return;
             }
             if (n == index.Root) return;

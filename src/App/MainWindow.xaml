@@ -6,15 +6,16 @@
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
-    <Grid x:Name="RootGrid" Padding="12" RowSpacing="8" ColumnSpacing="12">
+    <Grid x:Name="RootGrid" Padding="8" RowSpacing="6" ColumnSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*" MinWidth="300" />
-            <ColumnDefinition Width="3*" />
+            <!-- The treemap is worth more than a wide tree: fixed, narrow tree column. -->
+            <ColumnDefinition Width="360" />
+            <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <StackPanel Orientation="Horizontal" Spacing="8" Grid.ColumnSpan="2">
@@ -35,22 +36,23 @@
             </ListView.ItemContainerTransitions>
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
-                    <Setter Property="MinHeight" Value="30" />
+                    <Setter Property="MinHeight" Value="26" />
                     <Setter Property="Padding" Value="4,0" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:TreeRow">
-                    <Grid ColumnSpacing="6" AutomationProperties.Name="{x:Bind Label}">
+                    <Grid ColumnSpacing="6" AutomationProperties.Name="{x:Bind Label}" Background="Transparent"
+                          PointerEntered="Row_PointerEntered" PointerExited="Row_PointerExited">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="60" />
-                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="36" />
+                            <ColumnDefinition Width="70" />
                         </Grid.ColumnDefinitions>
                         <Border Background="Transparent" Padding="{x:Bind Indent}" Tapped="Chevron_Tapped">
-                            <FontIcon Glyph="{x:Bind Chevron}" FontSize="10" Width="18" Height="28" />
+                            <FontIcon Glyph="{x:Bind Chevron}" FontSize="10" Width="16" Height="24" />
                         </Border>
                         <TextBlock Grid.Column="1" Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                         <ProgressBar Grid.Column="2" Value="{x:Bind Percent}" Maximum="100" VerticalAlignment="Center" MinWidth="0" />
@@ -60,13 +62,17 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <Grid Grid.Row="1" Grid.Column="1" RowSpacing="8">
+        <Grid Grid.Row="1" Grid.Column="1" RowSpacing="6" ColumnSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="3*" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <SelectorBar x:Name="Views" SelectionChanged="Views_SelectionChanged" AutomationProperties.AutomationId="Views">
                 <SelectorBarItem Text="Treemap" AutomationProperties.AutomationId="ViewTreemap" IsSelected="True" />
                 <SelectorBarItem Text="File types" AutomationProperties.AutomationId="ViewFileTypes" />
@@ -75,24 +81,21 @@
                 <SelectorBarItem Text="Space hogs" AutomationProperties.AutomationId="ViewSpaceHogs" />
                 <SelectorBarItem Text="Duplicates" AutomationProperties.AutomationId="ViewDuplicates" />
             </SelectorBar>
-            <Grid Grid.Row="1" ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <BreadcrumbBar x:Name="Crumbs" ItemClicked="Crumbs_ItemClicked" AutomationProperties.AutomationId="Crumbs" />
-                <TextBox x:Name="FilterBox" Grid.Column="1" Width="200" PlaceholderText="Filter, e.g. *.iso" Visibility="Collapsed"
+            <!-- Views, breadcrumb and filter share one line. -->
+            <BreadcrumbBar x:Name="Crumbs" Grid.Column="1" VerticalAlignment="Center" ItemClicked="Crumbs_ItemClicked" AutomationProperties.AutomationId="Crumbs" />
+            <TextBox x:Name="FilterBox" Grid.Column="2" Width="200" VerticalAlignment="Center" PlaceholderText="Filter, e.g. *.iso" Visibility="Collapsed"
                          AutomationProperties.Name="Filter" AutomationProperties.AutomationId="FilterBox" TextChanged="Filter_TextChanged" />
-            </Grid>
-            <Grid x:Name="MapHost" Grid.Row="2" Background="Transparent" SizeChanged="MapHost_SizeChanged"
-                  PointerPressed="Map_PointerPressed" PointerMoved="Map_PointerMoved" DoubleTapped="Map_DoubleTapped"
+            <Grid x:Name="MapHost" Grid.Row="1" Grid.ColumnSpan="3" Background="Transparent" SizeChanged="MapHost_SizeChanged"
+                  PointerPressed="Map_PointerPressed" PointerMoved="Map_PointerMoved" PointerExited="Map_PointerExited" DoubleTapped="Map_DoubleTapped"
                   AutomationProperties.AutomationId="MapHost" AutomationProperties.Name="Treemap">
                 <Image x:Name="MapImage" Stretch="Fill" AutomationProperties.AutomationId="MapImage" AutomationProperties.Name="Treemap" />
                 <Canvas x:Name="MapOverlay" IsHitTestVisible="False">
                     <Rectangle x:Name="MapSelection" Stroke="{ThemeResource TextFillColorPrimaryBrush}" StrokeThickness="3" Visibility="Collapsed" />
+                    <Rectangle x:Name="MapHover" Stroke="{ThemeResource AccentFillColorDefaultBrush}" Fill="{ThemeResource SubtleFillColorSecondaryBrush}"
+                               StrokeThickness="2" StrokeDashArray="3,2" Visibility="Collapsed" />
                 </Canvas>
             </Grid>
-            <ListView x:Name="ResultList" Grid.Row="2" Visibility="Collapsed" SelectionMode="Single" SelectionChanged="ResultList_SelectionChanged"
+            <ListView x:Name="ResultList" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed" SelectionMode="Single" SelectionChanged="ResultList_SelectionChanged"
                       AutomationProperties.AutomationId="ResultList" AutomationProperties.Name="Results">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:ResultRow">
@@ -113,15 +116,16 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-            <Grid Grid.Row="3" Padding="8" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <!-- Compact: one line, grows (up to a limit) only when there is something to preview. -->
+            <Grid Grid.Row="2" Grid.ColumnSpan="3" Padding="8,4" CornerRadius="6" MaxHeight="230" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <TextBlock x:Name="PreviewTitle" TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="PreviewTitle" />
-                <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform" Visibility="Collapsed" AutomationProperties.Name="Preview" />
-                <MediaPlayerElement x:Name="PreviewMedia" Grid.Row="1" AreTransportControlsEnabled="True" Visibility="Collapsed" AutoPlay="False" />
-                <ScrollViewer x:Name="PreviewScroll" Grid.Row="1" Visibility="Collapsed" HorizontalScrollBarVisibility="Auto">
+                <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform" MaxHeight="200" HorizontalAlignment="Left" Visibility="Collapsed" AutomationProperties.Name="Preview" />
+                <MediaPlayerElement x:Name="PreviewMedia" Grid.Row="1" Height="200" AreTransportControlsEnabled="True" Visibility="Collapsed" AutoPlay="False" />
+                <ScrollViewer x:Name="PreviewScroll" Grid.Row="1" MaxHeight="200" Visibility="Collapsed" HorizontalScrollBarVisibility="Auto">
                     <TextBlock x:Name="PreviewText" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="PreviewText" />
                 </ScrollViewer>
             </Grid>
