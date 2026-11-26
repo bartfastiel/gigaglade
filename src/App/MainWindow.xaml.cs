@@ -20,6 +20,8 @@ public sealed partial class MainWindow : Window
 
     NodeIndex? _index;
     char _drive;
+    UsageSampler? _sampler; // set while memory or CPU is shown
+    UsnPosition? _position; // journal position of the shown index, for saving it
     int _selected = -1;
     bool _syncing, _live;
     readonly HashSet<int> _expanded = [];
@@ -46,8 +48,25 @@ public sealed partial class MainWindow : Window
             DriveBox.Items.Add(item);
             if (drive.Name[0] == 'C') DriveBox.SelectedItem = item;
         }
+        foreach (var kind in Enum.GetValues<UsageKind>())
+            DriveBox.Items.Add(new ComboBoxItem { Content = new UsageSampler(kind).RootName, Tag = kind });
         if (DriveBox.SelectedItem == null && DriveBox.Items.Count > 0) DriveBox.SelectedIndex = 0;
-        Closed += (_, _) => _session.Cancel();
+        Closed += (_, _) =>
+        {
+            AppLog.Write("window closed");
+            _session.Cancel();
+            // Keep the cache fresh for the next start and for the MCP server.
+            if (_live && _index is { } index && _position is { } position)
+                try { IndexCache.Save(IndexCache.DefaultPath(_drive), index, position); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { AppLog.Write($"cache not saved: {e.Message}"); }
+        };
+        // Every status message also goes to the log file.
+        // Every status message also goes to the log file, except progress and routine live updates.
+        Status.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) =>
+        {
+            if (!Status.Text.StartsWith("Scanning ") && !Status.Text.Contains(" – live, updated ") && !Status.Text.Contains(" – updated "))
+                AppLog.Write(Status.Text);
+        });
     }
 
     nint Handle => Win32Interop.GetWindowFromWindowId(AppWindow.Id);
@@ -59,13 +78,20 @@ public sealed partial class MainWindow : Window
 
     async void Start(bool useCache)
     {
-        if ((DriveBox.SelectedItem as ComboBoxItem)?.Tag is not char drive) return;
+        object? tag = (DriveBox.SelectedItem as ComboBoxItem)?.Tag;
+        if (tag is not (char or UsageKind)) return;
         _session.Cancel();
         var session = _session = new CancellationTokenSource();
-        _drive = drive;
         _live = false;
-        if (useCache) Reset();
-        try { await Run(drive, useCache, session.Token); }
+        bool usage = tag is UsageKind;
+        if (useCache || usage || _sampler != null) Reset();
+        _sampler = tag is UsageKind kind ? new UsageSampler(kind) : null;
+        UpdateCommands();
+        try
+        {
+            if (_sampler is { } sampler) await RunUsage(sampler, session.Token);
+            else await Run(_drive = (char)tag, useCache, session.Token);
+        }
         catch (OperationCanceledException) { }
         catch (Exception e)
         {
@@ -154,13 +180,42 @@ public sealed partial class MainWindow : Window
         Summary($"{(needsScan ? "scanned" : "loaded")} in {watch.Elapsed.TotalSeconds:F1} s");
 
         _live = position != null;
+        _position = position;
         if (position is { } live) await Live(drive, cache, live, token);
         else await WatchOnly(drive, token);
     }
 
+    /// <summary>Memory and CPU: sample all processes every two seconds.</summary>
+    async Task RunUsage(UsageSampler sampler, CancellationToken token)
+    {
+        Status.Text = "Measuring…";
+        while (true)
+        {
+            var index = await Task.Run(sampler.Sample, token);
+            token.ThrowIfCancellationRequested();
+            Show(index);
+            if (Views.Items.IndexOf(Views.SelectedItem) == 2) RefreshResults();
+            Status.Text = $"{sampler.ProcessIds.Count:N0} processes, {Fmt(index.Total[index.Root])} in total – updated {DateTime.Now:T}";
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+        }
+    }
+
+    string Fmt(long value) => _sampler?.Format(value) ?? Tools.FormatSize(value);
+
+    /// <summary>Deleting and the file analyses make no sense for processes.</summary>
+    void UpdateCommands()
+    {
+        bool files = _sampler == null;
+        RecycleButton.Visibility = DeleteButton.Visibility = files ? Visibility.Visible : Visibility.Collapsed;
+        for (int i = 0; i < Views.Items.Count; i++)
+            Views.Items[i].Visibility = files || i is 0 or 2 ? Visibility.Visible : Visibility.Collapsed;
+        if (!files && Views.Items.IndexOf(Views.SelectedItem) is not (0 or 2)) Views.SelectedItem = Views.Items[0];
+        FilterBox.PlaceholderText = files ? "Filter, e.g. *.iso" : "Filter, e.g. chrome";
+    }
+
     void Summary(string suffix)
     {
-        if (_index is not { } index) return;
+        if (_index is not { } index || _sampler != null) return;
         Status.Text = $"{index.NodeCount:N0} items, {Tools.FormatSize(index.Total[index.Root])} in use, "
             + $"{Tools.FormatSize(new DriveInfo($"{_drive}:").TotalFreeSpace)} free – {suffix}";
     }
@@ -173,6 +228,7 @@ public sealed partial class MainWindow : Window
     async Task Live(char drive, string cache, UsnPosition position, CancellationToken token)
     {
         var lastSave = Stopwatch.StartNew();
+        int updates = 0;
         while (true)
         {
             _wake = new();
@@ -186,9 +242,12 @@ public sealed partial class MainWindow : Window
             }
             token.ThrowIfCancellationRequested();
             position = update.Position;
+            _position = position;
             if (update.Index != index)
             {
                 Show(update.Index);
+                // Every update replaces the index arrays; give the old ones back regularly.
+                if (++updates % 6 == 0) await ReleaseMemory();
                 Summary($"live, updated {DateTime.Now:T}");
             }
             if (lastSave.Elapsed > SaveInterval)
@@ -250,7 +309,8 @@ public sealed partial class MainWindow : Window
 
     async Task LoadColors(NodeIndex index)
     {
-        var types = await Task.Run(() => Tools.Types(index, index.Root));
+        var types = await Task.Run(() => _sampler == null ? Tools.Types(index, index.Root)
+            : [.. index.Children(index.Root).ToArray().Select(n => new TypeStat(index.Name(n).ToString(), index.Total[n], 1))]);
         if (_index?.RootPath != index.RootPath) return;
         _colors = new(types);
         await RenderMap();
@@ -274,7 +334,7 @@ public sealed partial class MainWindow : Window
             var children = index.Children(node);
             bool open = _expanded.Contains(node);
             long parentTotal = node == index.Root ? 0 : index.Total[index.Parent[node]];
-            target.Add(new(node, depth, index.Name(node).ToString(), Tools.FormatSize(index.Total[node]),
+            target.Add(new(node, depth, index.Name(node).ToString(), Fmt(index.Total[node]),
                 parentTotal > 0 ? Math.Round(100.0 * index.Total[node] / parentTotal) : 100,
                 children.Length == 0 ? "" : open ? "" : ""));
             if (!open) continue;
@@ -363,7 +423,10 @@ public sealed partial class MainWindow : Window
 
     // ---- commands ----
 
-    string? SelectedPath => _index is { } index && _selected >= 0 ? index.Path(_selected) : null;
+    /// <summary>For processes, the path of the executable (if Windows tells it).</summary>
+    string? SelectedPath => _index is not { } index || _selected < 0 ? null
+        : _sampler is { } sampler ? (sampler.ProcessIds.TryGetValue(_selected, out int pid) ? sampler.ExecutablePath(pid) : null)
+        : index.Path(_selected);
 
     void Explorer_Click(object sender, RoutedEventArgs e)
     {
@@ -385,7 +448,7 @@ public sealed partial class MainWindow : Window
 
     async Task DeleteSelected(bool permanent)
     {
-        if (_deleting || SelectedPath is not { } path || _index is not { } index) return;
+        if (_deleting || _sampler != null || SelectedPath is not { } path || _index is not { } index) return;
         _deleting = true;
         try
         {
@@ -418,6 +481,14 @@ public sealed partial class MainWindow : Window
             if (permanent) await Task.Run(() => Deletion.Permanently(path));
             else done = await RunSta(() => Deletion.Recycle(path, owner));
             Status.Text = done ? $"{(permanent ? "Deleted" : "Moved to recycle bin")}: {path}" : "Cancelled.";
+            if (done && _selected == node)
+            {
+                // A recycled item still exists (in the recycle bin), so the index alone would keep it selected.
+                _selected = -1;
+                Tree.SelectedItem = null;
+                ShowMapSelection();
+                ShowPreview();
+            }
             if (_live) _wake.TrySetResult();
             else if (_index == index && !Path.Exists(path))
             {

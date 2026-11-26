@@ -9,16 +9,34 @@ Find out what fills your drive and clean it up. A portable WinUI 3 app for Windo
 - **Delete** to the recycle bin by default, permanently after confirmation, with extra warnings for system items
 - **Preview** of images, text, PDF, audio and video
 - **File types, largest (with filter), oldest, known space hogs, duplicates**
+- **Memory and CPU**: the same tree and treemap for RAM and processor use per program (choose them in the drive list)
+- **MCP server** for AI assistants: read-only questions about disk, memory and CPU use (see below)
 
 ## Build
 
 Requires the .NET 10 SDK.
 
     dotnet publish src/App -c Release -o dist/GigaGlade
+    dotnet publish src/Mcp -c Release -o dist/GigaGlade
 
 Copy the folder `dist/GigaGlade` anywhere and start `GigaGlade.exe`. It asks for administrator rights, which reading the master file table needs.
 
 Tests: `dotnet run --project src/Check`
+
+## MCP server
+
+`gigaglade-mcp.exe` lets an AI assistant such as Claude answer questions like "what fills my drive?" or
+"which program uses the most memory?". It speaks the Model Context Protocol on stdin/stdout, needs no
+administrator rights and only reads: it has no tool to delete anything.
+
+Tools: `drives`, `folder`, `largest_files`, `oldest_files`, `file_types`, `space_hogs`, `duplicates`, `memory`, `cpu`.
+
+Disk questions are answered from the index that the app caches (saved when the app closes and every
+ten minutes while it runs). Folders that are not in an index are scanned on demand.
+
+Example for Claude Code:
+
+    claude mcp add gigaglade -- "C:\path	o\GigaGlade\gigaglade-mcp.exe"
 
 ## Good to know
 
@@ -27,6 +45,8 @@ Tests: `dotnet run --project src/Check`
 - The app runs as administrator, so it can delete almost anything. Read the confirmation.
 - The index (file names and sizes) is cached in `%LOCALAPPDATA%\GigaGlade`. Nothing leaves your computer.
 - Without a change journal, the app only reports that something changed; press Rescan.
+- Very small files are stored inside the NTFS master file table and occupy no clusters, so they count as 0 B.
+- A log with status messages and errors is written to `%LOCALAPPDATA%\GigaGlade\gigaglade.log`.
 
 ## Licenses
 

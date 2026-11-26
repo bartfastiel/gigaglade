@@ -55,7 +55,7 @@ public sealed partial class MainWindow
             int x0 = Math.Clamp((int)(tile.X * scale), 0, width), x1 = Math.Clamp((int)((tile.X + tile.W) * scale), 0, width);
             int y0 = Math.Clamp((int)(tile.Y * scale), 0, height), y1 = Math.Clamp((int)((tile.Y + tile.H) * scale), 0, height);
             uint color = !tile.Leaf ? 0x303030u
-                : index.IsDirectory(tile.Node) ? 0x606060u : colors.Get(Tools.Extension(index.Name(tile.Node)));
+                : index.IsDirectory(tile.Node) ? 0x606060u : colors.Get(ColorKey(index, tile.Node));
             int r = (int)(color >> 16 & 255), g = (int)(color >> 8 & 255), b = (int)(color & 255);
             for (int y = y0; y < y1; y++)
             {
@@ -73,6 +73,14 @@ public sealed partial class MainWindow
             }
         }
         return pixels;
+    }
+
+    /// <summary>Files are coloured by extension, processes by program.</summary>
+    static string ColorKey(NodeIndex index, int node)
+    {
+        if (index.RootPath.Contains(':')) return Tools.Extension(index.Name(node));
+        while (node != index.Root && index.Parent[node] != index.Root) node = index.Parent[node];
+        return index.Name(node).ToString();
     }
 
     Tile? TileAt(Windows.Foundation.Point point)
@@ -96,7 +104,7 @@ public sealed partial class MainWindow
     void Map_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (TileAt(e.GetCurrentPoint(MapHost).Position) is { } tile && _index is { } index)
-            ToolTipService.SetToolTip(MapHost, $"{index.Path(tile.Node)}\n{Tools.FormatSize(index.Total[tile.Node])}");
+            ToolTipService.SetToolTip(MapHost, $"{(_sampler == null ? index.Path(tile.Node) : index.Name(tile.Node).ToString())}\n{Fmt(index.Total[tile.Node])}");
     }
 
     /// <summary>Zooms one level towards the clicked item.</summary>
@@ -186,6 +194,7 @@ public sealed partial class MainWindow
         ResultList.ItemsSource = null;
         if (_index is not { } index || view <= 0) return;
         string filter = FilterBox.Text.Trim();
+        var sampler = _sampler;
         try
         {
             if (view == 2) await Task.Delay(250, token); // wait until typing pauses
@@ -193,7 +202,9 @@ public sealed partial class MainWindow
             List<(int Node, string Title, string Detail, long Size, string Extension)> Compute()
             {
                 (int, string, string, long, string) Row(int n, string detail) => (n, index.Name(n).ToString(),
-                    detail + index.Path(n), index.Total[n], Tools.Extension(index.Name(n)));
+                    detail + (sampler == null ? index.Path(n)
+                        : sampler.ProcessIds.TryGetValue(n, out int pid) ? sampler.ExecutablePath(pid) ?? "" : ""),
+                    index.Total[n], sampler == null ? Tools.Extension(index.Name(n)) : ColorKey(index, n));
                 return view switch
                 {
                     1 => [.. Tools.Types(index, root).Take(ResultLimit).Select(t =>
@@ -207,7 +218,7 @@ public sealed partial class MainWindow
             }
             var rows = await Task.Run(Compute, token);
             if (token.IsCancellationRequested) return;
-            ResultList.ItemsSource = rows.Select(r => new ResultRow(r.Node, r.Title, r.Detail, Tools.FormatSize(r.Size), _colors.Brush(r.Extension))).ToList();
+            ResultList.ItemsSource = rows.Select(r => new ResultRow(r.Node, r.Title, r.Detail, Fmt(r.Size), _colors.Brush(r.Extension))).ToList();
             if (view == 5) Status.Text = $"{rows.Count:N0} files with identical copies (1 MB or larger)";
         }
         catch (OperationCanceledException) { }
@@ -233,17 +244,30 @@ public sealed partial class MainWindow
     async void ShowPreview()
     {
         string? path = SelectedPath;
-        if (path == _previewPath && path != null) return;
+        if (_sampler != null && _index is { } usage && _selected >= 0)
+        {
+            // Processes: details only, never a preview of the executable.
+            _previewPath = null;
+            ++_previewGeneration;
+            PreviewImage.Visibility = PreviewMedia.Visibility = PreviewScroll.Visibility = Visibility.Collapsed;
+            PreviewTitle.Text = $"{usage.Name(_selected)}  –  {Fmt(usage.Total[_selected])}"
+                + (_sampler.ProcessIds.TryGetValue(_selected, out int pid) ? $"  –  process {pid}" : $"  –  {usage.Children(_selected).Length} process(es)")
+                + (path != null ? $"\n{path}" : "");
+            return;
+        }
+        var current = _index;
+        string title = path == null || current == null ? "Select an item to preview it"
+            : $"{path}  –  {Fmt(current.Total[_selected])}, {current.FileCount[_selected]:N0} file(s)";
+        PreviewTitle.Text = title;
+        // The same file again (e.g. after it changed): new title, but keep the loaded content.
+        if (path != null && path == _previewPath) return;
         _previewPath = path;
         int generation = ++_previewGeneration;
         PreviewImage.Visibility = PreviewMedia.Visibility = PreviewScroll.Visibility = Visibility.Collapsed;
         PreviewImage.Source = null;
         PreviewMedia.Source = null;
         PreviewText.Text = "";
-        PreviewTitle.Text = path ?? "Select an item to preview it";
-        if (path == null || _index is not { } index) return;
-        PreviewTitle.Text = $"{path}  –  {Tools.FormatSize(index.Total[_selected])}, {index.FileCount[_selected]:N0} file(s)";
-        if (index.IsDirectory(_selected)) return;
+        if (path == null || current is not { } index || index.IsDirectory(_selected)) return;
         try
         {
             // Never trigger a download of cloud placeholders.
