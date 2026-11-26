@@ -59,7 +59,7 @@ sealed class Server
                 {
                     ["protocolVersion"] = request["params"]?["protocolVersion"]?.GetValue<string>() ?? Version,
                     ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
-                    ["serverInfo"] = new JsonObject { ["name"] = "gigaglade", ["version"] = "1.0.0" },
+                    ["serverInfo"] = new JsonObject { ["name"] = "gigaglade", ["version"] = typeof(Server).Assembly.GetName().Version?.ToString(3) ?? "0.0.0" },
                     ["instructions"] = "Read-only disk, memory and CPU analysis. Disk data comes from the index that the GigaGlade app caches; "
                         + "without one, folders are scanned on demand. Nothing is ever deleted; suggest deletions to the user instead.",
                 }),

@@ -12,6 +12,11 @@ Find out what fills your drive and clean it up. A portable WinUI 3 app for Windo
 - **Memory and CPU**: the same tree and treemap for RAM and processor use per program (choose them in the drive list)
 - **MCP server** for AI assistants: read-only questions about disk, memory and CPU use (see below)
 
+## Download
+
+Get the zip from [Releases](https://github.com/bartfastiel/gigaglade/releases), unpack it anywhere and start `GigaGlade.exe`.
+The program is not signed, so Windows SmartScreen may warn on the first start ("More info" → "Run anyway").
+
 ## Build
 
 Requires the .NET 10 SDK.
@@ -24,6 +29,8 @@ Copy the folder `dist/GigaGlade` anywhere and start `GigaGlade.exe`. It asks for
 Tests: `dotnet run --project src/Check`
 
 ## MCP server
+
+Instructions for Claude instances: [docs/using-with-claude.md](docs/using-with-claude.md).
 
 `gigaglade-mcp.exe` lets an AI assistant such as Claude answer questions like "what fills my drive?" or
 "which program uses the most memory?". It speaks the Model Context Protocol on stdin/stdout, needs no
@@ -50,4 +57,4 @@ Example for Claude Code:
 
 ## Licenses
 
-The source is under the [MIT License](LICENSE). The only package dependency is Microsoft's Windows App SDK (WinUI), including its WebView2 component; it and the .NET runtime come under their own licenses and are not part of this repository. Treemap layout: squarified algorithm as published by Bruls, Huizing and van Wijk (2000), implemented from scratch.
+The source is under the [MIT License](LICENSE). The only package dependency is Microsoft's Windows App SDK (WinUI), including its WebView2 component; it and the .NET runtime come under their own licenses and are not part of this repository; the release download contains them, see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Treemap layout: squarified algorithm as published by Bruls, Huizing and van Wijk (2000), implemented from scratch.
