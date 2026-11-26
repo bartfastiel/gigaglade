@@ -36,7 +36,7 @@ ten minutes while it runs). Folders that are not in an index are scanned on dema
 
 Example for Claude Code:
 
-    claude mcp add gigaglade -- "C:\path	o\GigaGlade\gigaglade-mcp.exe"
+    claude mcp add gigaglade -- "C:\path\to\GigaGlade\gigaglade-mcp.exe"
 
 ## Good to know
 
