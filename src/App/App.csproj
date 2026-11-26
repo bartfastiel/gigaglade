@@ -17,6 +17,7 @@
     <SelfContained>true</SelfContained>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- -p:Elevated=false builds a variant without administrator rights for UI tests. -->
+    <ApplicationIcon>Assets\GigaGlade.ico</ApplicationIcon>
     <Elevated Condition="'$(Elevated)' == ''">true</Elevated>
     <ApplicationManifest Condition="'$(Elevated)' == 'true'">app.manifest</ApplicationManifest>
     <ApplicationManifest Condition="'$(Elevated)' != 'true'">app.test.manifest</ApplicationManifest>
@@ -31,6 +32,9 @@
   <ItemGroup>
     <!-- The index consists of large arrays; give their memory back when it is replaced. -->
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\GigaGlade.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.7.0" />

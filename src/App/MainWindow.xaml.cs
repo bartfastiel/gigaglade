@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
         nint handle = Win32Interop.GetWindowFromWindowId(AppWindow.Id);
         double scale = GetDpiForWindow(handle) / 96.0;
         AppWindow.Resize(new((int)(1400 * scale), (int)(860 * scale)));
+        AppWindow.SetIcon(Path.Join(AppContext.BaseDirectory, "Assets", "GigaGlade.ico"));
 
         foreach (var drive in DriveInfo.GetDrives())
         {
